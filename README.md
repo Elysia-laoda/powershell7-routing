@@ -79,6 +79,22 @@ runspace 里执行命令，名字垫片帮不上忙）：
 powershell5 -File .\Test-SelfRoute.ps1 -Tag t -ExitCode 7   # 5.1 入口，期望 engine=Core、exit=7
 ```
 
+## 编写 .ps1 时请带上片段
+
+**约定：自己写、或让 AI 写 `.ps1` 时，默认让它带自路由片段** —— 不要指望调用方会把引擎挑对。
+写完一条命令即可（默认干跑，`-Apply` 落盘，幂等）：
+
+```powershell
+.\host\Add-Ps7SelfRoute.ps1 -Path <脚本所在目录> -Apply
+```
+
+两条硬性要求由工具处理，手写片段时要注意：**片段必须纯 ASCII**；**含非 ASCII 的脚本要有 UTF-8 BOM**
+（否则 5.1 会把无 BOM 的 UTF-8 按 GBK 读，可能在片段执行之前就解析失败）。
+
+三个例外：会被 `dot-source` 的脚本不要加（片段把执行变成独立进程，破坏变量共享）；要"失败得响"的
+脚本改用 `#requires -PSEdition Core`（与片段互斥）；调用方用 `-Command "& 'x.ps1' args"` 这种
+**代码串**方式启动时，片段会**主动放过**（重建不出原参数，而丢参数改道比不改道更糟）。
+
 ## 实现成果（实测，2026-09-25/26）
 
 机器：Windows 11 25H2（26200），Windows PowerShell 5.1.26100.9444，PowerShell 7.6.6。
@@ -191,6 +207,24 @@ AI-driven runs, wrap the payload in
 `pwsh -NoProfile -ExecutionPolicy Bypass -EncodedCommand <utf16le-base64>` and append
 `if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }` inside it — without that line the wrapper
 returns its own 0 and a failed command reads as success.
+
+**When you write a `.ps1`, ship the fragment with it.** Convention: when you author a script
+yourself — or have an AI author it — put the self-route fragment in it by default, rather than
+relying on the caller to pick the right engine. One command does it (dry-run by default, idempotent):
+
+```powershell
+.\host\Add-Ps7SelfRoute.ps1 -Path <your scripts> -Apply
+```
+
+The tool takes care of the two hard requirements, which matter if you write the fragment by hand:
+it **must be pure ASCII**, and any script containing non-ASCII text **needs a UTF-8 BOM** — without
+one, 5.1 reads the no-BOM UTF-8 file as GBK and can fail to parse it before the fragment ever runs.
+
+Three exceptions: do not add it to scripts that get dot-sourced (the fragment turns execution into a
+separate process and breaks variable sharing); use `#requires -PSEdition Core` instead when a loud
+failure is what you want (the two are mutually exclusive); and when a caller reaches the script
+through `-Command "& 'x.ps1' args"`, the fragment **deliberately declines to redirect** — it cannot
+rebuild the caller's arguments, and dropping them would be worse than staying on 5.1.
 
 **Verified** (Windows 11 25H2; 5.1.26100.9444; 7.6.6). A probe script that had **not been modified in
 any way** was launched from a 5.1 entry point, from a hardcoded `System32` full path, and from cmd
