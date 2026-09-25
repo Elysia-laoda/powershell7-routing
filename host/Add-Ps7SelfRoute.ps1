@@ -15,6 +15,8 @@ guest 里双击 .ps1：这些调用方根本不经过 PATH 上的 powershell，�
 两者互斥，因为 #requires 会让 5.1 在片段运行之前就拒绝执行。
 
 pwsh 不存在时片段原样放行（继续按 5.1 跑）：这是给"PS7 还没装的机器"留的退路，不是静默降级。
+调用方用 `-Command "& 'x.ps1' -Tag y"` 这类**代码串**方式启动时，参数列表重建不出来，片段也放过
+（留在 5.1）：丢掉参数改道比不改道更糟。片段只在 `-File` 或位置参数形式下改道。
 
 注意：本文件永远跳过自己（两个模式都跳过）。它的源码里含上面两个标记字面量，幂等检查会把它认成
 "已插入"，而移除操作会把保存片段的 here-string 一起剪掉 —— 都踩过。
@@ -55,17 +57,24 @@ if ($PSVersionTable.PSEdition -ne 'Core') {
     if (-not (Test-Path -LiteralPath $__psr7)) { $__psr7 = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\pwsh.exe' }
     if (Test-Path -LiteralPath $__psr7) {
         $__psrArg = @()
+        $__psrFound = $false
         $__psrCmd = [Environment]::GetCommandLineArgs()
         for ($__psrI = 1; $__psrI -lt $__psrCmd.Count; $__psrI++) {
             $__psrHit = $false
             try { $__psrHit = ([IO.Path]::GetFullPath($__psrCmd[$__psrI].Replace('/', '\')) -ieq [IO.Path]::GetFullPath($PSCommandPath)) } catch { }
             if ($__psrHit) {
+                $__psrFound = $true
                 if ($__psrI + 1 -lt $__psrCmd.Count) { $__psrArg = $__psrCmd[($__psrI + 1)..($__psrCmd.Count - 1)] }
                 break
             }
         }
-        & $__psr7 -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @__psrArg
-        exit $LASTEXITCODE
+        # Redirect only when the caller's own invocation can be rebuilt faithfully. Reached through
+        # -Command ("& 'x.ps1' -Tag y") the path never appears as an argument of its own, and
+        # restarting with no arguments would silently drop them -- worse than staying on 5.1.
+        if ($__psrFound) {
+            & $__psr7 -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @__psrArg
+            exit $LASTEXITCODE
+        }
     }
 }
 #psr7-selfroute-end
