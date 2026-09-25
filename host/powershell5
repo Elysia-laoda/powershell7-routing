@@ -1,0 +1,3 @@
+#!/bin/sh
+# 真正的 Windows PowerShell 5.1，给少数只在 5.1 下能跑的东西留的后门。
+exec "/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe" "$@"

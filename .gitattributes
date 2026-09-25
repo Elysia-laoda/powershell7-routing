@@ -1,0 +1,17 @@
+# Line endings are load-bearing here.
+#
+# cmd.exe reads .bat/.cmd files using the console code page and is known to mis-handle
+# LF-only batch files, so those stay CRLF. The MSYS/Git Bash shims and every PowerShell file
+# stay LF, including guest/shims/powershell.exe -- that one is a POSIX shell script that merely
+# happens to carry a .exe name (Windows-side callers resolve it via PATHEXT), not a binary.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=lf
+*.md text eol=lf
+LICENSE text eol=lf
+# Name the two extension-less host shims explicitly: a host/powershell* glob would also swallow
+# host/powershell.cmd and silently force LF on a batch file, which is exactly the mistake the
+# rules above exist to prevent.
+host/powershell text eol=lf
+host/powershell5 text eol=lf
+guest/shims/* text eol=lf
